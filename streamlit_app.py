@@ -14,14 +14,14 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from app import data as data_mod
-from app import indicators, signals
+from app import indicators, patterns, signals
 
 st.set_page_config(page_title="米国株テクニカル分析", page_icon="📈", layout="wide")
 
 st.title("📈 米国株テクニカル分析")
 
 # 価格チャートへ重ねる指標 / 別ペインで描く指標の定義
-OVERLAYS = ["移動平均", "ボリンジャー", "一目均衡表", "パラボリックSAR"]
+OVERLAYS = ["移動平均", "ボリンジャー", "一目均衡表", "パラボリックSAR", "サポート/レジスタンス", "ピボット"]
 PANES = ["RSI", "MACD", "ストキャス", "ADX", "CCI", "Williams %R", "MFI", "OBV", "ROC"]
 
 # ---- 入力 ----
@@ -33,26 +33,32 @@ with st.sidebar:
         "足", ["1d", "1wk", "1h"], index=0,
         format_func=lambda x: {"1d": "日足", "1wk": "週足", "1h": "1時間足"}[x],
     )
-    run = st.button("分析", type="primary", use_container_width=True)
+    run = st.button("分析", type="primary", width="stretch")
 
     st.divider()
-    st.subheader("価格チャートに重ねる")
-    overlays = [o for o in OVERLAYS if st.checkbox(o, value=(o in ("移動平均", "ボリンジャー")))]
+    st.subheader("価格チャートに重ねる指標")
+    overlays = st.multiselect(
+        "ドロップダウンから選択", OVERLAYS,
+        default=["移動平均", "ボリンジャー", "サポート/レジスタンス"],
+    )
 
-    st.subheader("表示する指標パネル")
-    panes = st.multiselect("オシレーター等", PANES, default=["RSI", "MACD"])
+    st.subheader("別パネルで表示する指標")
+    panes = st.multiselect(
+        "ドロップダウンから選択 ", PANES, default=["RSI", "MACD"],
+    )
 
 st.caption("データ提供: Yahoo Finance ／ 本ツールは教育目的であり投資助言ではありません。")
 
 
 @st.cache_data(ttl=60, show_spinner=False)
 def load(ticker: str, period: str, interval: str):
-    """データ取得 + 指標計算 + シグナル判定をまとめて行いキャッシュする。"""
+    """データ取得 + 指標計算 + シグナル + フォーメーションをまとめて行いキャッシュする。"""
     df = data_mod.fetch_history(ticker, period=period, interval=interval)
     enriched = indicators.compute_all(df)
     sig = signals.generate(enriched)
+    form = patterns.detect(enriched)
     name = data_mod.get_company_name(ticker)
-    return enriched, sig, name
+    return enriched, sig, form, name
 
 
 def _add_pane(fig, row, name, df):
@@ -96,7 +102,7 @@ def _add_pane(fig, row, name, df):
         fig.add_hline(y=0, line=dict(color="#8b949e", width=1, dash="dash"), row=row, col=1)
 
 
-def build_chart(df: pd.DataFrame, overlays: list[str], panes: list[str]) -> go.Figure:
+def build_chart(df: pd.DataFrame, overlays: list[str], panes: list[str], form: dict) -> go.Figure:
     """価格 + 選択された指標パネルを縦に並べたチャートを生成する。"""
     n_rows = 1 + len(panes)
     price_h = 0.6 if panes else 1.0
@@ -129,6 +135,22 @@ def build_chart(df: pd.DataFrame, overlays: list[str], panes: list[str]) -> go.F
         fig.add_trace(go.Scatter(x=x, y=df["ichi_senkou_b"], name="先行B(雲)", line=dict(color="rgba(239,83,80,0.4)", width=1), fill="tonexty", fillcolor="rgba(120,120,160,0.12)"), row=1, col=1)
     if "パラボリックSAR" in overlays:
         fig.add_trace(go.Scatter(x=x, y=df["psar"], name="SAR", mode="markers", marker=dict(color="#ffeb3b", size=3)), row=1, col=1)
+    if "サポート/レジスタンス" in overlays:
+        for r in form.get("resistance", [])[:3]:
+            fig.add_hline(y=r["level"], line=dict(color="rgba(239,83,80,0.5)", width=1, dash="dash"),
+                          annotation_text=f"R {r['level']:.1f}", annotation_position="right", row=1, col=1)
+        for s in form.get("support", [])[:3]:
+            fig.add_hline(y=s["level"], line=dict(color="rgba(38,166,154,0.5)", width=1, dash="dash"),
+                          annotation_text=f"S {s['level']:.1f}", annotation_position="right", row=1, col=1)
+    if "ピボット" in overlays:
+        ph = form.get("pivot_highs", [])
+        pl = form.get("pivot_lows", [])
+        if ph:
+            fig.add_trace(go.Scatter(x=[p["time"] for p in ph], y=[p["price"] for p in ph],
+                          name="高値ピボット", mode="markers", marker=dict(color="#ef5350", size=7, symbol="triangle-down")), row=1, col=1)
+        if pl:
+            fig.add_trace(go.Scatter(x=[p["time"] for p in pl], y=[p["price"] for p in pl],
+                          name="安値ピボット", mode="markers", marker=dict(color="#26a69a", size=7, symbol="triangle-up")), row=1, col=1)
 
     for i, pane in enumerate(panes, start=2):
         _add_pane(fig, i, pane, df)
@@ -148,7 +170,7 @@ if run or ticker:
         st.stop()
     try:
         with st.spinner(f"{ticker} を取得中..."):
-            df, sig, name = load(ticker, period, interval)
+            df, sig, form, name = load(ticker, period, interval)
     except data_mod.FetchError as exc:
         st.error(f"取得に失敗しました: {exc}")
         st.stop()
@@ -165,12 +187,34 @@ if run or ticker:
     c4.metric("ADX", f"{last['adx']:.0f}" if pd.notna(last["adx"]) else "—")
     c5.metric("ATR(14)", f"{last['atr_14']:.2f}" if pd.notna(last["atr_14"]) else "—")
 
-    # ---- シグナルチップ ----
+    # ---- 指標シグナル ----
     if sig["signals"]:
+        st.markdown("##### 📊 指標シグナル")
         cols = st.columns(min(len(sig["signals"]), 4))
         for i, s in enumerate(sig["signals"]):
             icon = {"bullish": "📈", "bearish": "📉", "neutral": "➖"}[s["type"]]
             cols[i % len(cols)].info(f"{icon} **{s['name']}**\n\n{s['detail']}")
 
+    # ---- フォーメーション分析 ----
+    st.markdown("##### 🔺 フォーメーション分析")
+    if form["patterns"]:
+        cols = st.columns(min(len(form["patterns"]), 4))
+        for i, p in enumerate(form["patterns"]):
+            icon = {"bullish": "📈", "bearish": "📉", "neutral": "➖"}[p["type"]]
+            box = cols[i % len(cols)]
+            text = f"{icon} **{p['name']}**\n\n{p['detail']}"
+            if p["type"] == "bullish":
+                box.success(text)
+            elif p["type"] == "bearish":
+                box.error(text)
+            else:
+                box.warning(text)
+    else:
+        st.caption("明確なフォーメーションは検出されませんでした。")
+
+    res_txt = " / ".join(f"{r['level']:.2f}" for r in form["resistance"][:3]) or "—"
+    sup_txt = " / ".join(f"{s['level']:.2f}" for s in form["support"][:3]) or "—"
+    st.caption(f"🔴 レジスタンス: {res_txt}　🟢 サポート: {sup_txt}")
+
     # ---- チャート ----
-    st.plotly_chart(build_chart(df, overlays, panes), use_container_width=True)
+    st.plotly_chart(build_chart(df, overlays, panes, form), width="stretch")

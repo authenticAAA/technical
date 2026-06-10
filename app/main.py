@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import data as data_mod
-from . import indicators, signals
+from . import indicators, patterns, signals
 
 app = FastAPI(title="US Stock Technical Analysis", version="0.1.0")
 
@@ -35,6 +35,7 @@ def analysis(
 
     enriched = indicators.compute_all(df)
     sig = signals.generate(enriched)
+    form = patterns.detect(enriched)
     name = data_mod.get_company_name(ticker.upper())
 
     payload = {
@@ -44,9 +45,29 @@ def analysis(
         "interval": interval,
         "candles": data_mod.to_records(enriched),
         "signals": sig,
+        "formations": _serialize_formations(form),
         "latest": _latest_summary(enriched),
     }
     return JSONResponse(payload)
+
+
+def _serialize_formations(form: dict) -> dict:
+    """フォーメーション結果を JSON シリアライズ可能な形に変換 (時刻を ISO 文字列に)。"""
+    import pandas as pd
+
+    def piv(items):
+        return [
+            {"time": pd.Timestamp(p["time"]).isoformat(), "price": p["price"]}
+            for p in items
+        ]
+
+    return {
+        "patterns": form["patterns"],
+        "support": form["support"],
+        "resistance": form["resistance"],
+        "pivot_highs": piv(form["pivot_highs"]),
+        "pivot_lows": piv(form["pivot_lows"]),
+    }
 
 
 def _latest_summary(df) -> dict:

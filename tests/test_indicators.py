@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app import indicators, signals
+from app import indicators, patterns, signals
 
 
 def _make_df(closes):
@@ -148,3 +148,56 @@ def test_signals_structure():
     assert set(result.keys()) == {"signals", "score", "verdict"}
     for sig in result["signals"]:
         assert set(sig.keys()) == {"name", "type", "detail"}
+
+
+# ---- フォーメーション分析 ----
+
+def _ohlc_from_close(closes):
+    closes = np.asarray(closes, dtype=float)
+    n = len(closes)
+    idx = pd.date_range("2024-01-01", periods=n, freq="D")
+    return pd.DataFrame(
+        {
+            "Open": closes,
+            "High": closes + 2.0,
+            "Low": closes - 2.0,
+            "Close": closes,
+            "Volume": np.full(n, 1_000_000.0),
+        },
+        index=idx,
+    )
+
+
+def test_find_pivots_detects_peak():
+    s = pd.Series([1, 2, 3, 10, 3, 2, 1], dtype=float)
+    highs = patterns.find_pivots(s, left=2, right=2, kind="high")
+    assert 3 in highs  # 値 10 の位置
+
+
+def test_detect_returns_structure():
+    df = _ohlc_from_close(np.linspace(100, 150, 120))
+    res = patterns.detect(df)
+    assert set(res.keys()) == {
+        "patterns", "support", "resistance", "pivot_highs", "pivot_lows"
+    }
+    for p in res["patterns"]:
+        assert set(p.keys()) == {"name", "type", "detail"}
+
+
+def test_detect_uptrend_structure():
+    # 高値・安値を切り上げるジグザグ -> 上昇トレンド検出
+    t = np.arange(120)
+    close = t * 0.5 + 6 * np.sin(t / 4.0) + 100
+    df = _ohlc_from_close(close)
+    res = patterns.detect(df)
+    names = [p["name"] for p in res["patterns"]]
+    assert "上昇トレンド" in names
+
+
+def test_detect_breakout():
+    # 横ばいの後に急騰 -> ブレイクアウト
+    close = np.concatenate([np.full(40, 100.0), np.array([130.0])])
+    df = _ohlc_from_close(close)
+    res = patterns.detect(df)
+    names = [p["name"] for p in res["patterns"]]
+    assert "ブレイクアウト" in names
