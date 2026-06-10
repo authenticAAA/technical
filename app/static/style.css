@@ -1,0 +1,120 @@
+:root {
+  --bg: #0e1117;
+  --panel: #161b22;
+  --border: #2a313c;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --green: #26a69a;
+  --red: #ef5350;
+  --accent: #58a6ff;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+}
+header h1 { margin: 0; font-size: 20px; }
+
+.controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 16px 24px;
+  align-items: center;
+}
+
+.controls input, .controls select, .controls button {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 14px;
+}
+.controls input { min-width: 240px; text-transform: uppercase; }
+.controls button {
+  background: var(--accent);
+  color: #0e1117;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+.controls button:hover { opacity: 0.9; }
+.controls button:disabled { opacity: 0.5; cursor: default; }
+
+.status { padding: 0 24px; color: var(--muted); min-height: 18px; }
+.status.error { color: var(--red); }
+
+.summary {
+  margin: 8px 24px 16px;
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.summary.hidden { display: none; }
+
+.verdict {
+  font-size: 28px;
+  font-weight: 800;
+  padding: 16px 20px;
+  border-radius: 8px;
+  text-align: center;
+  min-width: 140px;
+}
+.verdict.BUY { background: rgba(38,166,154,0.15); color: var(--green); }
+.verdict.SELL { background: rgba(239,83,80,0.15); color: var(--red); }
+.verdict.NEUTRAL { background: rgba(139,148,158,0.15); color: var(--muted); }
+
+.metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-content: start;
+}
+.metric { font-size: 13px; }
+.metric .label { color: var(--muted); display: block; }
+.metric .value { font-size: 16px; font-weight: 600; }
+
+.signals { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.chip.bullish { color: var(--green); border-color: var(--green); }
+.chip.bearish { color: var(--red); border-color: var(--red); }
+.chip.neutral { color: var(--muted); }
+
+.charts { padding: 0 24px 24px; }
+.chart-block { margin-bottom: 16px; }
+.chart-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.chart {
+  width: 100%;
+  height: 420px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.chart.small { height: 180px; }
+
+footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+}
