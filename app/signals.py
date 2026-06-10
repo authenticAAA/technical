@@ -106,9 +106,67 @@ def generate(df: pd.DataFrame) -> dict:
         elif k <= 20:
             add("ストキャス", "bullish", f"売られすぎ (%K={k:.1f})", 1)
 
-    if score >= 3:
+    # --- ADX (トレンドの強さ + 方向) ---
+    adx_val = last.get("adx")
+    pdi = last.get("plus_di")
+    mdi = last.get("minus_di")
+    if pd.notna(adx_val) and pd.notna(pdi) and pd.notna(mdi):
+        if adx_val >= 25:
+            if pdi > mdi:
+                add("ADX", "bullish", f"強い上昇トレンド (ADX={adx_val:.0f})", 2)
+            else:
+                add("ADX", "bearish", f"強い下降トレンド (ADX={adx_val:.0f})", 2)
+        else:
+            add("ADX", "neutral", f"トレンド弱い (ADX={adx_val:.0f})", 0)
+
+    # --- CCI ---
+    cci_val = last.get("cci_20")
+    if pd.notna(cci_val):
+        if cci_val >= 100:
+            add("CCI", "bearish", f"買われすぎ (CCI={cci_val:.0f})", 1)
+        elif cci_val <= -100:
+            add("CCI", "bullish", f"売られすぎ (CCI={cci_val:.0f})", 1)
+
+    # --- Williams %R ---
+    wr = last.get("williams_r")
+    if pd.notna(wr):
+        if wr >= -20:
+            add("Williams%R", "bearish", f"買われすぎ (%R={wr:.0f})", 1)
+        elif wr <= -80:
+            add("Williams%R", "bullish", f"売られすぎ (%R={wr:.0f})", 1)
+
+    # --- MFI (出来高加味) ---
+    mfi_val = last.get("mfi_14")
+    if pd.notna(mfi_val):
+        if mfi_val >= 80:
+            add("MFI", "bearish", f"資金流入過熱 (MFI={mfi_val:.0f})", 1)
+        elif mfi_val <= 20:
+            add("MFI", "bullish", f"資金流出過多 (MFI={mfi_val:.0f})", 1)
+
+    # --- パラボリック SAR ---
+    psar = last.get("psar")
+    if pd.notna(psar):
+        if last["Close"] > psar:
+            add("SAR", "bullish", "価格が SAR の上 (上昇局面)", 1)
+        else:
+            add("SAR", "bearish", "価格が SAR の下 (下降局面)", 1)
+
+    # --- 一目均衡表 (雲との位置関係) ---
+    sa = last.get("ichi_senkou_a")
+    sb = last.get("ichi_senkou_b")
+    if pd.notna(sa) and pd.notna(sb):
+        cloud_top = max(sa, sb)
+        cloud_bottom = min(sa, sb)
+        if last["Close"] > cloud_top:
+            add("一目均衡表", "bullish", "価格が雲の上", 2)
+        elif last["Close"] < cloud_bottom:
+            add("一目均衡表", "bearish", "価格が雲の下", 2)
+        else:
+            add("一目均衡表", "neutral", "価格が雲の中 (方向感なし)", 0)
+
+    if score >= 4:
         verdict = "BUY"
-    elif score <= -3:
+    elif score <= -4:
         verdict = "SELL"
     else:
         verdict = "NEUTRAL"

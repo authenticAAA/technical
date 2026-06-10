@@ -73,8 +73,62 @@ def test_bollinger_bands_order():
 def test_compute_all_adds_columns():
     df = _make_df(np.linspace(100, 130, 250))
     out = indicators.compute_all(df)
-    for col in ["sma_20", "sma_50", "sma_200", "rsi_14", "macd", "bb_upper", "atr_14"]:
+    for col in [
+        "sma_20", "sma_50", "sma_200", "rsi_14", "macd", "bb_upper", "atr_14",
+        "adx", "plus_di", "minus_di", "cci_20", "williams_r", "obv",
+        "mfi_14", "roc_12", "psar", "ichi_tenkan", "ichi_senkou_a",
+    ]:
         assert col in out.columns
+
+
+def test_adx_range_and_direction():
+    df = _make_df(np.linspace(100, 200, 200))  # 一貫した上昇
+    out = indicators.adx(df["High"], df["Low"], df["Close"])
+    valid = out.dropna()
+    assert (valid["adx"] >= 0).all() and (valid["adx"] <= 100).all()
+    # 上昇トレンドでは +DI > -DI
+    assert valid["plus_di"].iloc[-1] > valid["minus_di"].iloc[-1]
+
+
+def test_williams_r_bounds():
+    rng = np.random.default_rng(0)
+    df = _make_df(np.cumsum(rng.normal(size=200)) + 100)
+    out = indicators.williams_r(df["High"], df["Low"], df["Close"]).dropna()
+    assert (out >= -100).all() and (out <= 0).all()
+
+
+def test_obv_monotonic_on_uptrend():
+    df = _make_df(np.linspace(100, 150, 50))  # 毎日上昇 -> OBV は単調増加
+    out = indicators.obv(df["Close"], df["Volume"])
+    assert (out.diff().dropna() >= 0).all()
+
+
+def test_mfi_bounds():
+    rng = np.random.default_rng(1)
+    df = _make_df(np.cumsum(rng.normal(size=200)) + 100)
+    out = indicators.mfi(df["High"], df["Low"], df["Close"], df["Volume"]).dropna()
+    assert (out >= 0).all() and (out <= 100).all()
+
+
+def test_roc_basic():
+    s = pd.Series([100.0, 110.0])
+    out = indicators.roc(s, 1)
+    assert out.iloc[-1] == pytest.approx(10.0)
+
+
+def test_parabolic_sar_length_and_finite():
+    df = _make_df(np.linspace(100, 130, 60))
+    out = indicators.parabolic_sar(df["High"], df["Low"])
+    assert len(out) == len(df)
+    assert np.isfinite(out.iloc[-1])
+
+
+def test_ichimoku_columns():
+    df = _make_df(np.linspace(100, 130, 120))
+    out = indicators.ichimoku(df["High"], df["Low"], df["Close"])
+    assert list(out.columns) == [
+        "ichi_tenkan", "ichi_kijun", "ichi_senkou_a", "ichi_senkou_b", "ichi_chikou",
+    ]
 
 
 def test_signals_bullish_uptrend():
